@@ -8,11 +8,11 @@ from oauth1.oauth import OAuth
 import requests
 import pandas
 import datetime
+import pathlib
 # from mysecrets_example import keyfilename, key_password, consumer_key
 from mysecrets import keyfilename, key_password, consumer_key
 
-
-quarter = "2023Q1"
+quarter = "2023Q2"
 curs = ["USD", "EUR", "JPY", "AUD", "CAD"]
 
 ref_amt = str(100)
@@ -24,8 +24,11 @@ start_quarter = pandas.to_datetime(start_date).to_period("Q")
 uri_base = "https://sandbox.api.mastercard.com/enhanced/settlement/currencyrate/subscribed/summary-rates"
 signing_key = authenticationutils.load_signing_key(keyfilename, key_password)
 
-# filemode = "w"
-filemode = "a"
+if pathlib.Path(out_file_name).is_file():
+    filemode = "a"
+else:
+    filemode = "w"
+
 with pandas.ExcelWriter(out_file_name, mode=filemode, engine="openpyxl") as xls:
     for cur in curs:
         df = pandas.DataFrame()
