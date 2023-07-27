@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# pacman -Syu python-openpyxl
+
+
 import oauth1.authenticationutils as authenticationutils
 from oauth1.oauth import OAuth
 import requests
