@@ -217,8 +217,14 @@ with pandas.ExcelWriter(out_file_name, mode=filemode, engine="openpyxl") as xls:
                     response = requests.get(url, params=params, headers=headers)
                     if response.status_code == 200:
                         rjdat = response.json()
-                        rate = rjdat["data"]["conversionRate"]
-                        row[f"{cur}/{tocur} Rate"] = rate
+                        if rjdat["type"] == "error":
+                            print(f"Error fetching from: {response.url}")
+                            print(f"Error code: {rjdat['data']["errorCode"]}")
+                            print(f"Error message: {rjdat['data']["errorMessage"]}")
+                            sys.exit(-1)
+                        else:
+                            rate = rjdat["data"]["conversionRate"]
+                            row[f"{cur}/{tocur} Rate"] = rate
                     else:
                         print(f"Failed fetching from: {response.url}")
                         print(f"Status code: {response.status_code}")

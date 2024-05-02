@@ -55,5 +55,5 @@ sed 's,^consumer_key = .*,consumer_key = "bunchofupperlowercasealphanumerics!bun
 sed 's,^quarter = .*,quarter = "2023Q3",' -i get_rates.py  # update the year/quarter string
 # end MCAPI needs
 
-python get-rates.py
+python get-rates.py --help
 ```
