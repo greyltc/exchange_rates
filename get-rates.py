@@ -12,7 +12,8 @@ import sys
 quarter = "2024Q1"
 tocur = "GBP"
 curs = ["USD", "EUR", "JPY", "AUD", "CAD"]
-ref_amt = str(100)
+ref_amt = 100.0
+fee_percent = 0.0
 out_file_name = "master_exchange_rates.xlsx"
 
 # get user arguments
@@ -21,6 +22,8 @@ parser.add_argument("--benchmark-currency", "-b", default=tocur, help="benchmark
 parser.add_argument("--currencies", "-c", nargs='+', default=curs, help="exchange currencies")
 parser.add_argument("--quarter", "-q", default=quarter, help="fiscal quarter")
 parser.add_argument("--out-file", "-o", default=out_file_name, help="output file name")
+parser.add_argument("--amount", "-a", type=float, default=ref_amt, help="exchange amount (matters only for CCs)")
+parser.add_argument("--bank-fee-percent", "-f", type=float, default=fee_percent, help="bank fee [%] (matters only for CCs)")
 parser.add_argument("--source", choices=['ECB', 'BoE', 'MCAPI', 'Visa', 'MC'], default="Visa", help="exchange rate data source")
 parser.prog = sys.argv[0]
 args = parser.parse_args(sys.argv[1:])
@@ -29,6 +32,8 @@ out_file_name = args.out_file
 curs = args.currencies
 quarter = args.quarter
 tocur = args.benchmark_currency
+ref_amt = args.amount
+fee_percent = args.bank_fee_percent
 
 start_date = pandas.Period(quarter).start_time.to_pydatetime()
 end_date   = pandas.Period(quarter).end_time  .to_pydatetime()
@@ -127,8 +132,8 @@ elif args.source=="Visa":
     url = "https://www.visa.com.my/cmsapi/fx/rates"
     when = datetime.date(2024,3,5)
     params = {
-        "amount": 100,
-        "fee": 0.0,
+        "amount": ref_amt,
+        "fee": fee_percent,
         "utcConvertedDate": when.strftime('%m/%d/%Y'),
         "exchangedate": when.strftime('%m/%d/%Y'),
         "fromCurr": "GBP",
@@ -145,8 +150,8 @@ elif args.source == "MC":
         "fxDate": when.strftime('%Y-%m-%d'),
         "transCurr": "CAD",
         "crdhldBillCurr": "GBP",
-        "bankFee": 0.0,
-        "transAmt": 100.0,
+        "bankFee": fee_percent,
+        "transAmt": ref_amt,
     }
 else:
     sys.exit(-2)
@@ -170,7 +175,7 @@ with pandas.ExcelWriter(out_file_name, mode=filemode, engine="openpyxl") as xls:
                 row["Date"] = str(date.date())
                 if args.source == "MCAPI":
                     datestring = date.strftime("%Y-%m-%d")
-                    uri = f"{uri_base}?rate_date={datestring}&trans_curr={cur}&trans_amt={ref_amt}&crdhld_bill_curr={tocur}"
+                    uri = f"{uri_base}?rate_date={datestring}&trans_curr={cur}&trans_amt={str(ref_amt)}&crdhld_bill_curr={tocur}"
                     authHeader = OAuth.get_authorization_header(uri, 'GET', None, consumer_key, signing_key)
                     response = requests.get(uri, headers={'Authorization' : authHeader})
                     rjdat = response.json()["data"]
