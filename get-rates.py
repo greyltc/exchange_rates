@@ -23,7 +23,7 @@ parser.add_argument("--currencies", "-c", nargs='+', default=curs, help="exchang
 parser.add_argument("--quarter", "-q", default=quarter, help="fiscal quarter")
 parser.add_argument("--out-file", "-o", default=out_file_name, help="output file name")
 parser.add_argument("--amount", "-a", type=float, default=ref_amt, help="exchange amount (matters only for CCs)")
-parser.add_argument("--bank-fee-percent", "-f", type=float, default=fee_percent, help="bank fee [%] (matters only for CCs)")
+parser.add_argument("--bank-fee-percent", "-f", type=float, default=fee_percent, help="bank fee [%%] (matters only for CCs)")
 parser.add_argument("--source", choices=['ECB', 'BoE', 'MCAPI', 'Visa', 'MC'], default="Visa", help="exchange rate data source")
 parser.prog = sys.argv[0]
 args = parser.parse_args(sys.argv[1:])
