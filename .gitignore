@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 
 mysecrets.py
+*.xlsx

@@ -3,6 +3,9 @@ use mastercard api to get currency exchange rates
 
 ## Usage
 ```
+python3 -m venv .venv
+source .venv/bin/activate # or `.venv\Scripts\activate`
+pip install pandasdmx
 git clone https://github.com/Mastercard/oauth1-signer-python.git
 cd oauth1-signer-python
 git checkout 7205e45
