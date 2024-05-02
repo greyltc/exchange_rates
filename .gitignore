@@ -161,3 +161,4 @@ cython_debug/
 
 mysecrets.py
 *.xlsx
+!master_exchange_rates.xlsx
