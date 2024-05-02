@@ -28,6 +28,13 @@ options:
 
 ## Install
 ```
+# get the script
+wget https://raw.githubusercontent.com/greyltc/exchange_rates/main/get-rates.py -O get-rates.py
+chmod +x get-rates.py
+
+# install python-openpyxl
+pacman -Syu python-openpyxl
+
 # needed for BoE source
 python3 -m venv .venv
 source .venv/bin/activate # or `.venv\Scripts\activate`
@@ -38,7 +45,6 @@ pip install pandasdmx
 git clone https://github.com/Mastercard/oauth1-signer-python.git
 cd oauth1-signer-python
 git checkout 7205e45
-wget https://raw.githubusercontent.com/greyltc/exchange_rates/main/get_rates.py -O get_rates.py
 wget https://raw.githubusercontent.com/greyltc/exchange_rates/main/mysecrets_example.py -O mysecrets.py
 
 # insert your secrets. see https://developer.mastercard.com/platform/documentation/security-and-authentication/using-oauth-1a-to-access-mastercard-apis/
