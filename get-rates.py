@@ -9,9 +9,9 @@ import pathlib
 import sys
 
 # defaults
-quarter = "2024Q1"
+quarter = "2024Q3"
 tocur = "GBP"
-curs = ["USD", "EUR", "JPY", "AUD", "CAD"]
+curs = ["USD", "EUR", "JPY", "AUD", "CAD", "CHF"]
 ref_amt = 100.0
 fee_percent = 0.0
 out_file_name = "master_exchange_rates.xlsx"
