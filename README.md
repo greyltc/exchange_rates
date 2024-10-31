@@ -13,9 +13,9 @@ options:
   --benchmark-currency BENCHMARK_CURRENCY, -b BENCHMARK_CURRENCY
                         benchmark currency (default: GBP)
   --currencies CURRENCIES [CURRENCIES ...], -c CURRENCIES [CURRENCIES ...]
-                        exchange currencies (default: ['USD', 'EUR', 'JPY', 'AUD', 'CAD'])
+                        exchange currencies (default: ['USD', 'EUR', 'JPY', 'AUD', 'CAD', 'CHF'])
   --quarter QUARTER, -q QUARTER
-                        fiscal quarter (default: 2024Q1)
+                        fiscal quarter (default: 2024Q4)
   --out-file OUT_FILE, -o OUT_FILE
                         output file name (default: master_exchange_rates.xlsx)
   --amount AMOUNT, -a AMOUNT
