@@ -9,7 +9,7 @@ import pathlib
 import sys
 
 # defaults
-quarter = "2024Q4"
+quarter = "2025Q1"
 tocur = "GBP"
 curs = ["USD", "EUR", "JPY", "AUD", "CAD", "CHF"]
 ref_amt = 100.0
