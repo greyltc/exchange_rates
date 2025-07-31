@@ -8,9 +8,6 @@ import datetime
 import pathlib
 import sys
 
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
-
 # defaults
 quarter = "2025Q3"
 tocur = "GBP"
