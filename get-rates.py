@@ -8,8 +8,11 @@ import datetime
 import pathlib
 import sys
 
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
 # defaults
-quarter = "2025Q2"
+quarter = "2025Q3"
 tocur = "GBP"
 curs = ["USD", "EUR", "JPY", "AUD", "CAD", "CHF"]
 ref_amt = 100.0
