@@ -9,7 +9,7 @@ import pathlib
 import sys
 
 # defaults
-quarter = "2025Q3"
+quarter = "2025Q4"
 tocur = "GBP"
 curs = ["USD", "EUR", "JPY", "AUD", "CAD", "CHF"]
 ref_amt = 100.0
@@ -46,10 +46,9 @@ before_start = start_date.date()-datetime.timedelta(days=10)
 date_range_like = pandas.date_range(start=pandas.Timestamp(start_date), end=pandas.Timestamp(end_date), freq='1D')
 
 headers = {
-    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/54.0.2840.90 '
-                'Safari/537.36'
+    'user-agent':   'Mozilla/5.0 (X11; Linux x86_64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/143.0.0.0 Safari/537.36',
 }
 
 if args.source == "ECB":
@@ -126,10 +125,12 @@ elif args.source == "BoE":
     reid = df.reindex(date_range_like, method='ffill')
 elif args.source=="Visa":
     # visa
-    import requests
+    import pycurl
+    from io import BytesIO
+    import json
+    from urllib.parse import urlencode
     # discovered via https://www.visa.com.my/support/consumer/travel-support/exchange-rate-calculator.html
     # eg: https://www.visa.com.my/cmsapi/fx/rates?amount=101&fee=0&utcConvertedDate=05%2F02%2F2024&exchangedate=05%2F02%2F2024&fromCurr=GBP&toCurr=USD
-    url = "https://www.visa.com.my/cmsapi/fx/rates"
     when = datetime.date(2024,3,5)
     params = {
         "amount": ref_amt,
@@ -139,6 +140,22 @@ elif args.source=="Visa":
         "fromCurr": "GBP",
         "toCurr": "CAD",
     }
+    base_url = "https://www.visa.com.my/cmsapi/fx/rates"
+    visa_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+    visa_headers = [
+        "accept: application/json, text/plain, */*",
+        "accept-language: en-US,en;q=0.9",
+        "priority: u=1, i",
+        "referer: https://www.visa.com.my/support/consumer/travel-support/exchange-rate-calculator.html",
+        'sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+        "sec-ch-ua-mobile: ?0",
+        'sec-ch-ua-platform: "Linux"',
+        "sec-fetch-dest: empty",
+        "sec-fetch-mode: cors",
+        "sec-fetch-site: same-origin",
+        f"user-agent: {visa_agent}",
+    ]
+    visa_url = f"{base_url}?{urlencode(params)}"
 elif args.source == "MC":
     # mastercard
     import requests
@@ -199,15 +216,32 @@ with pandas.ExcelWriter(out_file_name, mode=filemode, engine="openpyxl") as xls:
                     params["exchangedate"] = datestring
                     params["fromCurr"] = tocur
                     params["toCurr"] = cur
-                    response = requests.get(url, params=params, headers=headers)
-                    if response.status_code == 200:
-                        rjdat = response.json()
+
+                    visa_url = f"{base_url}?{urlencode(params)}"
+
+                    buffer = BytesIO()
+
+                    c = pycurl.Curl()
+                    c.setopt(c.URL, visa_url)
+                    c.setopt(c.HTTPHEADER, visa_headers)
+                    c.setopt(c.WRITEDATA, buffer)
+                    c.setopt(c.FOLLOWLOCATION, True)
+                    c.setopt(c.SSL_VERIFYPEER, True)
+                    c.setopt(c.SSL_VERIFYHOST, 2)
+                    c.setopt(c.USERAGENT, visa_agent)
+
+                    c.perform()
+                    status_code = c.getinfo(pycurl.RESPONSE_CODE)
+                    c.close()
+
+                    if status_code == 200:
+                        response_body = buffer.getvalue().decode("utf-8")
+                        rjdat = json.loads(response_body)
                         rate = float(rjdat["fxRateWithAdditionalFee"])
                         row[f"{cur}/{tocur} Rate"] = rate
                     else:
-                        print(f"Failed fetching from: {response.url}")
-                        print(f"Status code: {response.status_code}")
-                        print(f"Reason: {response.reason}")
+                        print(f"Failed fetching from: {visa_url}")
+                        print(f"Status code: {status_code}")
                         sys.exit(-1)
                 elif args.source == "MC":
                     datestring = date.strftime('%Y-%m-%d')
