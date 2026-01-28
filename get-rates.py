@@ -214,7 +214,7 @@ with pandas.ExcelWriter(out_file_name, mode=filemode, engine="openpyxl") as xls:
                 #val['Date'] = pandas.to_datetime( val['Date'],utc=True)
                 sorted_df = val.sort_values(by='Date', ascending=True)
                 sorted_df['Date'] = sorted_df['Date'].apply(lambda a: pandas.to_datetime(a).date())
-                sorted_df.drop_duplicates(subset=["Date"])
+                sorted_df = sorted_df.drop_duplicates(subset=["Date"])
                 print(sorted_df)
                 sorted_df.to_excel(xls, sheet_name=key, index=False)
     else:
