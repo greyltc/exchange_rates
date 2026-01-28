@@ -8,8 +8,10 @@ import datetime
 import pathlib
 import sys
 
+pandas.set_option('display.max_rows', None)
+
 # defaults
-quarter = "2025Q4"
+quarter = "2026Q1"
 tocur = "GBP"
 curs = ["USD", "EUR", "JPY", "AUD", "CAD", "CHF"]
 ref_amt = 100.0
@@ -22,11 +24,14 @@ parser.add_argument("--benchmark-currency", "-b", default=tocur, help="benchmark
 parser.add_argument("--currencies", "-c", nargs='+', default=curs, help="exchange currencies")
 parser.add_argument("--quarter", "-q", default=quarter, help="fiscal quarter")
 parser.add_argument("--out-file", "-o", default=out_file_name, help="output file name")
+parser.add_argument("--process-jsons", "-j", action='store_true', help="only process json files in this dir")
+parser.add_argument("--just-print-urls", "-p", action='store_true', help="only print urls")
 parser.add_argument("--amount", "-a", type=float, default=ref_amt, help="exchange amount (matters only for CCs)")
 parser.add_argument("--bank-fee-percent", "-f", type=float, default=fee_percent, help="bank fee [%%] (matters only for CCs)")
 parser.add_argument("--source", choices=['ECB', 'BoE', 'MCAPI', 'Visa', 'MC'], default="Visa", help="exchange rate data source")
 parser.prog = sys.argv[0]
 args = parser.parse_args(sys.argv[1:])
+args.process_jsons = True
 
 out_file_name = args.out_file
 curs = args.currencies
@@ -50,6 +55,17 @@ headers = {
                     'AppleWebKit/537.36 (KHTML, like Gecko) '
                     'Chrome/143.0.0.0 Safari/537.36',
 }
+
+def process_visa_json(jstr, teh_row):
+    rjdat = json.loads(jstr)
+    rate = float(rjdat["fxRateWithAdditionalFee"])
+    teh_cur = rjdat["originalValues"]["fromCurrency"]
+    teh_tocur = rjdat["originalValues"]["toCurrency"]
+    this_date = datetime.datetime.fromtimestamp(rjdat["originalValues"]["asOfDate"], tz=datetime.timezone.utc)
+    teh_row["Date"] = pandas.to_datetime(this_date).date()
+    teh_row[f"{teh_cur}/{teh_tocur} Rate"] = rate
+    return teh_row
+
 
 if args.source == "ECB":
     # european central bank
@@ -141,7 +157,7 @@ elif args.source=="Visa":
         "toCurr": "CAD",
     }
     base_url = "https://www.visa.com.my/cmsapi/fx/rates"
-    visa_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+    visa_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
     visa_headers = [
         "accept: application/json, text/plain, */*",
         "accept-language: en-US,en;q=0.9",
@@ -150,9 +166,6 @@ elif args.source=="Visa":
         'sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
         "sec-ch-ua-mobile: ?0",
         'sec-ch-ua-platform: "Linux"',
-        "sec-fetch-dest: empty",
-        "sec-fetch-mode: cors",
-        "sec-fetch-site: same-origin",
         f"user-agent: {visa_agent}",
     ]
     visa_url = f"{base_url}?{urlencode(params)}"
@@ -179,98 +192,131 @@ else:
     filemode = "w"
 
 with pandas.ExcelWriter(out_file_name, mode=filemode, engine="openpyxl") as xls:
-    for cur in curs:
-        df = pandas.DataFrame()
-        date = start_date
-        quarter = start_quarter
-        sheet_name=f"{args.source}-{start_quarter.year}Q{start_quarter.quarter}-{cur}to{tocur}"
-        if sheet_name in xls.sheets:
-            print(f"Sheet {sheet_name} is already in {out_file_name}. Skipping data fetch.")
-        else:
-            while quarter == start_quarter:
-                row = {}
-                row["Date"] = str(date.date())
-                if args.source == "MCAPI":
-                    datestring = date.strftime("%Y-%m-%d")
-                    uri = f"{uri_base}?rate_date={datestring}&trans_curr={cur}&trans_amt={str(ref_amt)}&crdhld_bill_curr={tocur}"
-                    authHeader = OAuth.get_authorization_header(uri, 'GET', None, consumer_key, signing_key)
-                    response = requests.get(uri, headers={'Authorization' : authHeader})
-                    rjdat = response.json()["data"]
-                    # print(rjdat)
-                    row["currency"] = rjdat["transCurr"]
-                    row[f"{rjdat['transCurr']}/{tocur} Rate"] = rjdat["effectiveConversionRate"]
-                    row["Diff"] = rjdat["pctDifferenceMastercardExclAllFeesAndEcb"]
-                    row["ECB Date"] = rjdat["ecb"]["ecbReferenceRateDate"]
-                    row["ECB Rate"] = rjdat["ecb"]["ecbReferenceRate"]
-                elif args.source == "ECB":
-                    this_row = reid.loc[pandas.Timestamp(date)]
-                    rate = this_row.loc[:, cur, :, :,:][0]
-                    row[f"{cur}/{tocur} Rate"] = float(f"{1/rate:0.7f}")
-                elif args.source == "BoE":
-                    this_row = reid.loc[pandas.Timestamp(date)]
-                    rate = this_row.loc[series_code_lookup[cur]]
-                    row[f"{cur}/{tocur} Rate"] = float(f"{1/rate:0.7f}")
-                elif args.source == "Visa":
-                    datestring = date.strftime('%m/%d/%Y')
-                    params["utcConvertedDate"] = datestring
-                    params["exchangedate"] = datestring
-                    params["fromCurr"] = tocur
-                    params["toCurr"] = cur
+    if args.process_jsons:
+        sheets = {}
+        directory_path = pathlib.Path('.')
+        for file_path in directory_path.rglob('*.json'):
+            row = {}
+            if file_path.is_file():
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    file_content = file.read()
+                    row = process_visa_json(file_content, row)
+                    pdts = pandas.Timestamp(row["Date"])
+                    year = row["Date"]
+                    sheet_name=f"{args.source}-{pdts.year}Q{pdts.quarter}-{list(row.keys())[1].split('/')[0]}to{tocur}"
+                    if sheet_name not in sheets:
+                        sheets[sheet_name] = pandas.DataFrame()
+                    #print(row)
+                    sheets[sheet_name] = pandas.concat([sheets[sheet_name], pandas.DataFrame([row])], ignore_index=True)
+        
+        for key, val in sheets.items():
+            if not val.empty:
+                #val['Date'] = pandas.to_datetime( val['Date'],utc=True)
+                sorted_df = val.sort_values(by='Date', ascending=True)
+                sorted_df['Date'] = sorted_df['Date'].apply(lambda a: pandas.to_datetime(a).date())
+                sorted_df.drop_duplicates(subset=["Date"])
+                print(sorted_df)
+                sorted_df.to_excel(xls, sheet_name=key, index=False)
+    else:
+        for cur in curs:
+            df = pandas.DataFrame()
+            date = start_date
+            quarter = start_quarter
+            sheet_name=f"{args.source}-{start_quarter.year}Q{start_quarter.quarter}-{cur}to{tocur}"
+            if sheet_name in xls.sheets:
+                print(f"Sheet {sheet_name} is already in {out_file_name}. Skipping data fetch.")
+            else:
+                while quarter == start_quarter:
+                    row = {}
+                    row["Date"] = str(date.date())
+                    if args.source == "MCAPI":
+                        datestring = date.strftime("%Y-%m-%d")
+                        uri = f"{uri_base}?rate_date={datestring}&trans_curr={cur}&trans_amt={str(ref_amt)}&crdhld_bill_curr={tocur}"
+                        authHeader = OAuth.get_authorization_header(uri, 'GET', None, consumer_key, signing_key)
+                        response = requests.get(uri, headers={'Authorization' : authHeader})
+                        rjdat = response.json()["data"]
+                        # print(rjdat)
+                        row["currency"] = rjdat["transCurr"]
+                        row[f"{rjdat['transCurr']}/{tocur} Rate"] = rjdat["effectiveConversionRate"]
+                        row["Diff"] = rjdat["pctDifferenceMastercardExclAllFeesAndEcb"]
+                        row["ECB Date"] = rjdat["ecb"]["ecbReferenceRateDate"]
+                        row["ECB Rate"] = rjdat["ecb"]["ecbReferenceRate"]
+                    elif args.source == "ECB":
+                        this_row = reid.loc[pandas.Timestamp(date)]
+                        rate = this_row.loc[:, cur, :, :,:][0]
+                        row[f"{cur}/{tocur} Rate"] = float(f"{1/rate:0.7f}")
+                    elif args.source == "BoE":
+                        this_row = reid.loc[pandas.Timestamp(date)]
+                        rate = this_row.loc[series_code_lookup[cur]]
+                        row[f"{cur}/{tocur} Rate"] = float(f"{1/rate:0.7f}")
+                    elif args.source == "Visa":
+                        datestring = date.strftime('%m/%d/%Y')
+                        params["utcConvertedDate"] = datestring
+                        params["exchangedate"] = datestring
+                        params["fromCurr"] = tocur
+                        params["toCurr"] = cur
 
-                    visa_url = f"{base_url}?{urlencode(params)}"
-
-                    buffer = BytesIO()
-
-                    c = pycurl.Curl()
-                    c.setopt(c.URL, visa_url)
-                    c.setopt(c.HTTPHEADER, visa_headers)
-                    c.setopt(c.WRITEDATA, buffer)
-                    c.setopt(c.FOLLOWLOCATION, True)
-                    c.setopt(c.SSL_VERIFYPEER, True)
-                    c.setopt(c.SSL_VERIFYHOST, 2)
-                    c.setopt(c.USERAGENT, visa_agent)
-
-                    c.perform()
-                    status_code = c.getinfo(pycurl.RESPONSE_CODE)
-                    c.close()
-
-                    if status_code == 200:
-                        response_body = buffer.getvalue().decode("utf-8")
-                        rjdat = json.loads(response_body)
-                        rate = float(rjdat["fxRateWithAdditionalFee"])
-                        row[f"{cur}/{tocur} Rate"] = rate
-                    else:
-                        print(f"Failed fetching from: {visa_url}")
-                        print(f"Status code: {status_code}")
-                        sys.exit(-1)
-                elif args.source == "MC":
-                    datestring = date.strftime('%Y-%m-%d')
-                    params["fxDate"] = datestring
-                    params["crdhldBillCurr"] = tocur
-                    params["transCurr"] = cur
-                    response = requests.get(url, params=params, headers=headers)
-                    if response.status_code == 200:
-                        rjdat = response.json()
-                        if rjdat["type"] == "error":
-                            print(f"Error fetching from: {response.url}")
-                            print(f"Error code: {rjdat['data']["errorCode"]}")
-                            print(f"Error message: {rjdat['data']["errorMessage"]}")
-                            sys.exit(-1)
+                        
+                        visa_url = f"{base_url}?{urlencode(params)}"
+                        if args.just_print_urls:
+                            print(f'"{visa_url}",')
                         else:
-                            rate = rjdat["data"]["conversionRate"]
-                            row[f"{cur}/{tocur} Rate"] = rate
-                    else:
-                        print(f"Failed fetching from: {response.url}")
-                        print(f"Status code: {response.status_code}")
-                        print(f"Reason: {response.reason}")
-                        sys.exit(-1)
-                else:
-                    sys.exit(-2)
+                            buffer = BytesIO()
 
-                print(row)
-                if len(row) > 1:
-                    df = pandas.concat([df, pandas.DataFrame([row])], ignore_index=True)
-                date += datetime.timedelta(days=1)
-                quarter = pandas.to_datetime(date).to_period("Q")
-        if not df.empty:
-            df.to_excel(xls, sheet_name=sheet_name, index=False)
+                            c = pycurl.Curl()
+                            c.setopt(c.URL, visa_url)
+                            c.setopt(c.HTTPHEADER, visa_headers)
+                            c.setopt(c.WRITEDATA, buffer)
+                            c.setopt(c.FOLLOWLOCATION, True)
+                            c.setopt(c.SSL_VERIFYPEER, True)
+                            c.setopt(c.SSL_VERIFYHOST, 2)
+                            c.setopt(c.USERAGENT, visa_agent)
+
+                            c.perform()
+                            status_code = c.getinfo(pycurl.RESPONSE_CODE)
+                            c.close()
+
+                            if status_code == 200:
+                                response_body = buffer.getvalue().decode("utf-8")
+                                row = process_visa_json(response_body, row)
+                                #rjdat = json.loads(response_body)
+                                #rate = float(rjdat["fxRateWithAdditionalFee"])
+                                #row[f"{cur}/{tocur} Rate"] = rate
+                            else:
+                                print(f"Failed fetching from: {visa_url}")
+                                print(f"Status code: {status_code}")
+                                sys.exit(-1)
+                    elif args.source == "MC":
+                        datestring = date.strftime('%Y-%m-%d')
+                        params["fxDate"] = datestring
+                        params["crdhldBillCurr"] = tocur
+                        params["transCurr"] = cur
+                        response = requests.get(url, params=params, headers=headers)
+                        if response.status_code == 200:
+                            rjdat = response.json()
+                            if rjdat["type"] == "error":
+                                print(f"Error fetching from: {response.url}")
+                                print(f"Error code: {rjdat['data']["errorCode"]}")
+                                print(f"Error message: {rjdat['data']["errorMessage"]}")
+                                sys.exit(-1)
+                            else:
+                                rate = rjdat["data"]["conversionRate"]
+                                row[f"{cur}/{tocur} Rate"] = rate
+                        else:
+                            print(f"Failed fetching from: {response.url}")
+                            print(f"Status code: {response.status_code}")
+                            print(f"Reason: {response.reason}")
+                            sys.exit(-1)
+                    else:
+                        sys.exit(-2)
+
+                    if not args.just_print_urls:
+                        print(row)
+                    if len(row) > 1:
+                        df = pandas.concat([df, pandas.DataFrame([row])], ignore_index=True)
+                    date += datetime.timedelta(days=1)
+                    quarter = pandas.to_datetime(date).to_period("Q")
+            if not df.empty:
+                df.to_excel(xls, sheet_name=sheet_name, index=False)
+
+
